@@ -16,28 +16,31 @@ var connection = mysql.createConnection({
 connection.connect(function(err) {
   if (err) throw err;
   console.log("connected as id" + connection.threadId);
-  openStore();
+  displayProducts();
 });
 
 //Run query for desired data after the connection.
-function openStore() {
-  connection.query("SELECT * FROM products", function(err, result) {
+function displayProducts() {
+  connection.query("SELECT * FROM products", function(err, res) {
     if (err) throw err;
-    console.log(result);
+    for (var i = 0; i < res.length; i++) {
+      console.log(
+        `
+        Product Name: ${res[i].product_name} | Product ID: ${res[i].item_id} | Product Price: ${res[i].price} | Units in Stock: ${res[i].stock_quantity}
+        `
+      )
+    }
     promptUser();
   });
 }
 
 //Call the function to prompt user.
 function promptUser() {
-  inquirer.prompt([
-
-    {
+  inquirer.prompt([{
       type: "input",
       name: "ID",
       message: "Hello! Please input the id of the item you would like to purchase."
     },
-
     {
       type: "input",
       name: "Units",
@@ -45,15 +48,48 @@ function promptUser() {
     }
     //Code that uses order input to change stock number in the database.
   ]).then(function(answer) {
-    // Variables converting User input into number values.
-    var idInteger = parseInt(answer.ID);
-    var unitsInteger = parseInt(answer.Units);
-    //Connection query to pull and change info in database.
-    connection.query("SELECT * FROM products WHERE item_id = ?",
-      idInteger,
-      function(err, res) {
-        if (err) throw err;
-        console.log(res[0].stock_quantity);
-      })
+    connection.query("SELECT * FROM products", function(err, res) {
+      if (err) throw err;
+      var purchase;
+      for (var i = 0; i < res.length; i++) {
+        if (res[i].item_id === parseInt(answer.ID)) {
+          purchase = res[i];
+          totalPrice = (purchase.price * answer.Units);
+        }
+      }
+      if (purchase.stock_quantity >= parseInt(answer.Units)) {
+        connection.query(
+          "UPDATE products SET ? WHERE ?",
+          [{
+              stock_quantity: (purchase.stock_quantity - parseInt(answer.Units))
+            },
+            {
+              item_id: purchase.item_id
+            }
+          ],
+        );
+        console.log(
+          `The total for your purchase is ${totalPrice}.`
+        );
+      } else {
+        console.log("Sorry! Insufficient quantity to fulfill your order.")
+      };
+      keepShopping();
+    });
   });
+};
+
+function keepShopping() {
+  inquirer.prompt([{
+    type: "confirm",
+    message: "Would you like to continue shopping?",
+    name: "continue"
+  }]).then(function(keepShoppingResponse) {
+    if (keepShoppingResponse.continue === true) {
+      displayProducts();
+    } else {
+      console.log("Thanks for checking us out, come back soon!");
+      connection.end();
+    }
+  })
 };
